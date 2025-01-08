@@ -1,88 +1,230 @@
 ---
-title: 'Markdown Syntax'
-description: 'Text, title, and styling in standard markdown'
-icon: 'text-size'
+title: 'Technical Reference'
+description: 'Detailed technical specifications and implementation details'
+icon: 'book-open'
 ---
 
-## Titles
+# Technical Reference
 
-Best used for section headers.
+## Type Definitions
 
-```md
-## Titles
-```
-
-### Subtitles
-
-Best use to subsection headers.
-
-```md
-### Subtitles
+### SweepTask
+A SweepTask can be any of the following:
+```lua
+type SweepTask = (() -> ()) | Destructable | RBXScriptConnection | thread
 ```
 
 <Tip>
-
-Each **title** and **subtitle** creates an anchor and also shows up on the table of contents on the right.
-
+SweepTasks are the fundamental unit of cleanup in the Sweep framework. They can be functions, objects, connections, or threads.
 </Tip>
 
-## Text Formatting
+| Type | Description |
+| ---- | ----------- |
+| Function | A function that can be called for cleanup |
+| Destructable | Instance or object with Destroy method |
+| RBXScriptConnection | [RBXScriptConnection](https://create.roblox.com/docs/reference/engine/datatypes/RBXScriptConnection) |
+| thread | [Coroutine](https://create.roblox.com/docs/reference/engine/libraries/coroutine) |
 
-We support most markdown formatting. Simply add `**`, `_`, or `~` around text to format it.
-
-| Style         | How to write it   | Result          |
-| ------------- | ----------------- | --------------- |
-| Bold          | `**bold**`        | **bold**        |
-| Italic        | `_italic_`        | _italic_        |
-| Strikethrough | `~strikethrough~` | ~strikethrough~ |
-
-You can combine these. For example, write `**_bold and italic_**` to get **_bold and italic_** text.
-
-You need to use HTML to write superscript and subscript text. That is, add `<sup>` or `<sub>` around your text.
-
-| Text Size   | How to write it          | Result                 |
-| ----------- | ------------------------ | ---------------------- |
-| Superscript | `<sup>superscript</sup>` | <sup>superscript</sup> |
-| Subscript   | `<sub>subscript</sub>`   | <sub>subscript</sub>   |
-
-## Linking to Pages
-
-You can add a link by wrapping text in `[]()`. You would write `[link to google](https://google.com)` to [link to google](https://google.com).
-
-Links to pages in your docs need to be root-relative. Basically, you should include the entire folder path. For example, `[link to text](/writing-content/text)` links to the page "Text" in our components section.
-
-Relative links like `[link to text](../text)` will open slower because we cannot optimize them as easily.
-
-## Blockquotes
-
-### Singleline
-
-To create a blockquote, add a `>` in front of a paragraph.
-
-> Dorothy followed her through many of the beautiful rooms in her castle.
-
-```md
-> Dorothy followed her through many of the beautiful rooms in her castle.
+### Destructable
+```lua
+type Destructable = Instance | { Destroy: () -> () }
 ```
 
-### Multiline
+A Destructable can be either:
+- A [Roblox Instance](https://create.roblox.com/docs/reference/engine/classes/Instance)
+- Any object with a Destroy method
 
-> Dorothy followed her through many of the beautiful rooms in her castle.
->
-> The Witch bade her clean the pots and kettles and sweep the floor and keep the fire fed with wood.
+## Internal Implementation Details
 
-```md
-> Dorothy followed her through many of the beautiful rooms in her castle.
->
-> The Witch bade her clean the pots and kettles and sweep the floor and keep the fire fed with wood.
+### Task Storage
+Tasks are stored internally in the Sweep instance using two main tables:
+```lua
+self._tasks = {} -- Stores the actual tasks
+self._labels = {} -- Stores optional debug labels for tasks
 ```
 
-### LaTeX
+### Task Indexing
+Tasks use a numerical indexing system:
+- Tasks are indexed numerically starting from 1
+- Each task gets a unique ID returned by `GiveTask`
+- Labels are stored with the same index as their corresponding task
 
-Mintlify supports [LaTeX](https://www.latex-project.org) through the Latex component.
+## Memory Management
 
-<Latex>8 x (vk x H1 - H2) = (0,1)</Latex>
+### Garbage Collection
+The framework handles cleanup through several mechanisms:
+- Tasks are properly dereferenced when cleaned
+- Connections are explicitly disconnected
+- Objects are destroyed using their Destroy method
+- Threads are cancelled using task_cancel
 
-```md
-<Latex>8 x (vk x H1 - H2) = (0,1)</Latex>
+### Connection Handling
+```lua
+-- Clean connections first to prevent any pending events
+for index, task in pairs(tasks) do
+    if typeof(task) == "RBXScriptConnection" then
+        task:Disconnect()
+        tasks[index] = nil
+        self._labels[index] = nil
+    end
+end
 ```
+
+## Debug System
+
+### Debug Mode
+Debug mode is controlled through ReplicatedStorage:
+```lua
+local debug = ReplicatedStorage:FindFirstChild("Debug")
+if debug and debug.Value then
+    print("[Sweep Debug]", ...)
+end
+```
+
+### Debug Information
+When enabled, the system logs:
+- Task creation and deletion
+- Memory usage (via gcinfo())
+- Stack traces for important operations
+- Task type information
+- Connection states
+- Thread states
+
+### Debug Logging
+The debug system provides detailed logging for:
+
+| Operation | Information Logged |
+| --------- | ----------------- |
+| Task Creation | Timestamp, task type, label |
+| Task Cleanup | Timestamp, cleanup duration |
+| Memory Usage | Current memory usage, changes |
+| Task Execution | Start time, end time, duration |
+| Connection States | Connected, disconnected events |
+| Thread Management | Thread creation, completion |
+| Promise Resolution | Resolution time, state |
+
+## Advanced Usage
+
+### Custom Task Types
+You can extend Sweep with custom task types:
+
+```lua
+local CustomTask = {}
+CustomTask.__index = CustomTask
+
+function CustomTask.new()
+    return setmetatable({
+        _cleanup = function() end
+    }, CustomTask)
+end
+
+function CustomTask:Destroy()
+    self._cleanup()
+end
+
+-- Usage with Sweep
+local customTask = CustomTask.new()
+sweep:GiveTask(customTask)
+```
+
+### Promise Integration
+The Promise integration handles different promise states:
+
+```lua
+function Sweep:GivePromise(promise)
+    -- Return immediately if promise is already resolved
+    if not promise:IsPending() then
+        return promise
+    end
+
+    -- Create new promise that can be tracked
+    local newPromise = promise.resolved(promise)
+    local id = self:GiveTask(newPromise)
+
+    -- Clean up automatically when promise completes
+    newPromise:Finally(function()
+        self[id] = nil
+    end)
+
+    return newPromise
+end
+```
+
+### Interval Task Implementation
+```lua
+function SweepTaskUtils.interval(interval, callback)
+    local running = true
+    local thread = task.spawn(function()
+        while running do
+            callback()
+            task.wait(interval)
+        end
+    end)
+
+    return function()
+        running = false
+        task.cancel(thread)
+    end
+end
+```
+
+## Performance Considerations
+
+### Memory Usage
+<Tip>
+Optimize memory usage by cleaning up tasks as soon as they're no longer needed.
+</Tip>
+
+Key considerations:
+- Each task requires minimal overhead (just table entries)
+- Labels add additional memory overhead per task
+- Debug mode increases memory usage due to logging
+
+### CPU Usage
+Performance characteristics:
+- Task cleanup is performed sequentially
+- Connections are prioritized in cleanup
+- Interval tasks run on separate threads
+- Promise resolution is asynchronous
+
+### Best Practices
+
+1. **Task Creation**
+```lua
+-- Preferred: Single task for multiple operations
+sweep:GiveTask(function()
+    cleanup1()
+    cleanup2()
+    cleanup3()
+end)
+
+-- Avoid: Multiple individual tasks
+sweep:GiveTask(cleanup1)
+sweep:GiveTask(cleanup2)
+sweep:GiveTask(cleanup3)
+```
+
+2. **Connection Management**
+```lua
+-- Preferred: Group related connections
+sweep:GiveTask(function()
+    local conn1 = obj.Event1:Connect(handler1)
+    local conn2 = obj.Event2:Connect(handler2)
+    return function()
+        conn1:Disconnect()
+        conn2:Disconnect()
+    end
+end)
+```
+
+3. **Memory Optimization**
+```lua
+-- Preferred: Clean unused tasks immediately
+local taskId = sweep:GiveTask(heavyOperation)
+-- ... use the operation ...
+sweep[taskId] = nil  -- Clean up when done
+```
+
+<Tip>
+Always use task labels in debug mode to track task lifecycles and identify potential memory leaks.
+</Tip>
