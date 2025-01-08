@@ -1,37 +1,39 @@
 ---
-title: 'Code Blocks'
-description: 'Display inline code and code blocks'
+title: 'Getting Started with Sweep'
+description: 'Learn how to use the Sweep framework for resource management'
 icon: 'code'
 ---
 
-## Basic
+## Installation
 
-### Inline Code
+### Requirements
+- [Roblox Studio](https://create.roblox.com/docs/studio/setting-up-roblox-studio)
+- [Knit Framework](https://sleitnick.github.io/Knit/)
+- (Optional) [ProfileStore](https://madstudioroblox.github.io/ProfileService/) for data management
 
-To denote a `word` or `phrase` as code, enclose it in backticks (`).
+### Setup Steps
 
-```
-To denote a `word` or `phrase` as code, enclose it in backticks (`).
-```
+1. Add the Sweep framework to your project:
+   ```lua
+   -- ReplicatedStorage/Packages/Sweep
+   local Sweep = require(ReplicatedStorage.Packages.Sweep)
+   ```
 
-### Code Block
+2. Add SweepTaskUtils:
+   ```lua
+   -- ReplicatedStorage/Packages/SweepTaskUtils
+   local SweepTaskUtils = require(ReplicatedStorage.Packages.SweepTaskUtils)
+   ```
 
-Use [fenced code blocks](https://www.markdownguide.org/extended-syntax/#fenced-code-blocks) by enclosing code in three backticks and follow the leading ticks with the programming language of your snippet to get syntax highlighting. Optionally, you can also write the name of your code after the programming language.
+3. (Optional) Enable debugging:
+   ```lua
+   -- Create a BoolValue in ReplicatedStorage named "Debug"
+   local debugValue = Instance.new("BoolValue")
+   debugValue.Name = "Debug"
+   debugValue.Value = true
+   debugValue.Parent = game:GetService("ReplicatedStorage")
+   ```
 
-```java HelloWorld.java
-class HelloWorld {
-    public static void main(String[] args) {
-        System.out.println("Hello, World!");
-    }
-}
-```
+## Basic Usage
 
-````md
-```java HelloWorld.java
-class HelloWorld {
-    public static void main(String[] args) {
-        System.out.println("Hello, World!");
-    }
-}
-```
-````
+### Creating a Sweep Instance
